@@ -17,6 +17,7 @@ if manifest["name"] != "VisitorCalendar" or manifest["version_number"] != versio
     raise ValueError("Project and listing must identify the same release")
 dll = root / "bin" / "Release" / framework / "VisitorCalendar.dll"
 files = {
+    "LICENSE": root / "LICENSE",
     "manifest.json": listing / "manifest.json",
     "README.md": root / "README.md",
     "CHANGELOG.md": root / "CHANGELOG.md",

@@ -33,3 +33,9 @@ python package.py
 The projects default to the local Steam game and the Daybook Dev profile for build references. Override `GameDir` and `ProfileDir` with MSBuild properties for another installation. Packaging writes `dist/VisitorCalendar-0.1.0.zip`.
 
 To compare the calendar with specific companion builds, pass three DLL paths after `--` on the test command, in the order VisitorCalendar, WeeklyHermit, DailyCaravan.
+
+## Contributing and license
+
+Bug reports and pull requests are welcome. See the [contribution guide](CONTRIBUTING.md) for local testing and reporting instructions.
+
+The original mod code is available under the [MIT License](LICENSE). Super Fantasy Kingdom, its game assets, and third-party dependencies retain their respective licenses and ownership.

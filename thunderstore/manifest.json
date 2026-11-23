@@ -1,7 +1,7 @@
 {
   "name": "VisitorCalendar",
   "version_number": "0.1.0",
-  "website_url": "https://github.com/GKJ-Super-Fantasy-Kingdom/VisitorCalendar",
+  "website_url": "https://github.com/GKJ-Super-Fantasy-Kingdom/visitor-calendar",
   "description": "See known visitor appointments and today's claims on the day display. Inspect game portraits in the native calendar with gamepad, keyboard or mouse.",
   "dependencies": [
     "BepInEx-BepInExPack-5.4.2305",
