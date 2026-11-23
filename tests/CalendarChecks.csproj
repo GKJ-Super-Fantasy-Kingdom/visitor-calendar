@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <GameDir Condition="'$(GameDir)' == ''">D:\SteamLibrary\steamapps\common\Super Fantasy Kingdom</GameDir>
+    <ProfileDir Condition="'$(ProfileDir)' == ''">$(APPDATA)\Thunderstore Mod Manager\DataFolder\SuperFantasyKingdom\profiles\Daybook Dev</ProfileDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../src/Schedule.cs" Link="Schedule.cs" />
+    <Reference Include="Assembly-CSharp" HintPath="$(GameDir)\Super Fantasy Kingdom_Data\Managed\Assembly-CSharp.dll" />
+    <Reference Include="Mono.Cecil" HintPath="$(ProfileDir)\BepInEx\core\Mono.Cecil.dll" />
+  </ItemGroup>
+</Project>

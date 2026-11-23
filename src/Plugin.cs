@@ -1,0 +1,126 @@
+using System;
+using BepInEx;
+using BepInEx.Logging;
+using HarmonyLib;
+using SuperFantasyKingdom;
+using SuperFantasyKingdom.UI;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+namespace VisitorCalendar
+{
+    [BepInPlugin(Id, "Visitor Calendar", "0.1.0")]
+    [BepInDependency(Visitors.Weekly, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(Visitors.Daily, BepInDependency.DependencyFlags.SoftDependency)]
+    public sealed class Plugin : BaseUnityPlugin
+    {
+        internal const string Id = "sfk.visitorcalendar";
+        private static ManualLogSource log;
+        private Harmony patches;
+        private void Awake()
+        {
+            log = Logger;
+            patches = new Harmony(Id);
+            try { patches.PatchAll(typeof(Plugin).Assembly); }
+            catch { patches.UnpatchSelf(); throw; }
+            Logger.LogInfo("Visitor Calendar 0.1.0 ready.");
+        }
+        private void OnDestroy() => patches?.UnpatchSelf();
+        internal static void LogWarning(Exception e) => log.LogWarning(e.Message);
+
+        internal static void Focus(GameObject target)
+        {
+            if (target != null && !target.activeInHierarchy) return;
+            GamepadManager.Instance.SetGameObjectToSelect(target, force: true);
+            var events = EventSystem.current;
+            if (events != null && events.currentSelectedGameObject != target) events.SetSelectedGameObject(target);
+        }
+
+        private static GameObject returnTo;
+        internal static CalendarView View;
+
+        [HarmonyPatch(typeof(OverlayManager), nameof(OverlayManager.OpenCalendar))]
+        private static class Open
+        {
+            private static void Prefix()
+            {
+                returnTo = EventSystem.current?.currentSelectedGameObject;
+                if (returnTo == null) returnTo = GamepadManager.Instance.GetGameObjectToSelect();
+            }
+            private static void Postfix(Transform __result)
+            {
+                if (View != null && View.transform == __result) View.SelectToday();
+            }
+        }
+
+        [HarmonyPatch(typeof(UICalendar), "OnEnable")]
+        private static class Bind
+        {
+            private static void Postfix(UICalendar __instance, Transform ___calendarDays, GameObject ___lastDay,
+                UnityEngine.Localization.LocalizedString ___stringBoss, UnityEngine.Localization.LocalizedString ___stringDayX)
+            {
+                View = __instance.GetComponent<CalendarView>() ?? __instance.gameObject.AddComponent<CalendarView>();
+                View.Bind(___calendarDays, ___lastDay, ___stringBoss, ___stringDayX);
+            }
+        }
+
+        [HarmonyPatch(typeof(UICalendar), nameof(UICalendar.OnEnterDay))]
+        private static class Tooltip
+        {
+            private static bool Prefix(UICalendar __instance, int day)
+            {
+                var view = __instance.GetComponent<CalendarView>();
+                return view == null || !view.Hover(day);
+            }
+        }
+
+        // Vanilla translates the first keyboard binding to a legacy KeyCode. Read
+        // the active input action instead so remaps work and opening is one press.
+        [HarmonyPatch(typeof(UICalendar), "Update")]
+        private static class CalendarKey
+        {
+            private static bool Prefix(UICalendar __instance)
+            {
+                if (View == null || View.gameObject != __instance.gameObject) return true;
+                View.KeyboardToggle();
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(OverlayManager), nameof(OverlayManager.Cancel))]
+        private static class Back
+        {
+            private static bool Prefix(OverlayManager __instance) =>
+                !__instance.IsCalendarOpen() || View == null || !View.Back();
+        }
+
+        [HarmonyPatch(typeof(OverlayManager), nameof(OverlayManager.CloseOverlay))]
+        private static class Close
+        {
+            private static void Prefix(OverlayManager __instance, out bool __state) => __state = __instance.IsCalendarOpen();
+            private static void Postfix(OverlayManager __instance, bool __state)
+            {
+                if (!__state || __instance.IsCalendarOpen()) return;
+                if (returnTo != null && returnTo.activeInHierarchy) Focus(returnTo);
+                View = null;
+                returnTo = null;
+            }
+        }
+
+        [HarmonyPatch(typeof(UIClockButtonDay), "Start")]
+        private static class Clock
+        {
+            private static void Postfix(UIClockButtonDay __instance) => DayBadge.Attach(__instance.transform);
+        }
+
+        [HarmonyPatch(typeof(UIResourceAmount), "Start")]
+        private static class ResourceDay
+        {
+            private static void Postfix(UIResourceAmount __instance)
+            {
+                if (__instance is UIResourceAmountDay) DayBadge.Attach(__instance.transform);
+            }
+        }
+    }
+}
