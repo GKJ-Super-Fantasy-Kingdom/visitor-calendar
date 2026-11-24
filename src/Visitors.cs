@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using HarmonyLib;
@@ -10,9 +11,18 @@ namespace VisitorCalendar
     {
         internal const string Weekly = "gkj.superfantasykingdom.weeklyhermit";
         internal const string Daily = "sfk.dailycaravan";
+        internal const string Charters = "gkj.sfk.kingdomcharters";
+        private static readonly FieldInfo DialogueId = typeof(DialogueCollection).GetField("actor",
+            BindingFlags.Instance | BindingFlags.NonPublic);
 
         internal static Actors Identity(Guest guest)
         {
+            if (guest == null) return Actors.None;
+            if (guest.GetType().Assembly != typeof(Guest).Assembly)
+            {
+                var dialogue = guest.GetDialogueCollection();
+                return dialogue != null && DialogueId?.GetValue(dialogue) is Actors id ? id : Actors.None;
+            }
             switch (guest)
             {
                 case GuestHermit _: return Actors.Hermit;
@@ -47,6 +57,7 @@ namespace VisitorCalendar
             var s = new Schedule {
                 Today = clock.CurrentDay(), LastDay = clock.GetDayLimit(), Challenge = challenge != null,
                 HermitInterval = Setting(Weekly, "IntervalDays"), CaravanStart = Setting(Daily, "FirstDay"),
+                History = VisitState.History, CaravanGateOpened = race.HasRaceEventFlag(RaceEvent.GateOpened),
                 CaravansUnlocked = WorldManager.Instance.HasUnlockedCaravans()
             };
             Add(Actors.Hermit, challenge?.guestHermit ?? 2, RaceEvent.HermitInQuestion);
@@ -64,55 +75,88 @@ namespace VisitorCalendar
             s.Invitations[1] = race.GetGuestWeek2();
             s.Invitations[2] = race.GetGuestWeek3();
             s.Invitations[3] = race.GetGuestWeek4();
+            s.SharedArrivalOverride = NativeBookings.SharedArrivalOverride;
+            s.ArrivalOnly.UnionWith(NativeBookings.ArrivalOnly);
+            s.VanillaCaravanUnlock = !NativeBookings.CaravanUnlockPatched;
+            if (Chainloader.PluginInfos.TryGetValue(Charters, out var charter) && charter.Instance != null)
+            {
+                int? originalDay = MerchantBooking.FirstVisit(charter.Instance, GameDataManager.Instance.GetRunID(),
+                    s.Challenge, Chainloader.PluginInfos.ContainsKey(Daily));
+                s.ConsumedCaravanDay = originalDay ?? 0;
+                s.PendingMerchantCharter = originalDay == 0;
+            }
+            var decision = DailyCaravanDecision(s.Today);
+            if (decision == CaravanDecision.Claimed || decision == CaravanDecision.Declined)
+                VisitState.Arrived.Add(Actors.Caravan);
             s.Arrived.UnionWith(VisitState.Arrived);
             s.Arrived.UnionWith(VisitState.Claimed);
-            if (s.CaravanStart > 0 && CaravanClaimRestored()) s.Arrived.Add(Actors.Caravan);
-            if (!s.Challenge && s.HermitInterval > 0 && s.Today > 2 && (s.Today - 2) % s.HermitInterval == 0 &&
-                s.Known.Contains(Actors.Hermit) && !s.Arrived.Contains(Actors.Hermit))
-                s.HermitOfferPossible = CanOfferRecruit();
+            foreach (var visits in s.History.Days.Values)
+                foreach (var actor in visits.Keys) DiscoverArrival(actor);
+            foreach (var actor in s.Arrived) DiscoverArrival(actor);
+            // A newly registered actor can be identified by a real invitation or
+            // arrival and a recorded encounter. Never map an unfamiliar ID to a date.
+            foreach (int id in s.Invitations) Discover((Actors)id);
+            // The repeat offer may wait for another guest or be vetoed by a
+            // patched recruitment pool. Its merchant callback confirms eligibility.
+            s.HermitOfferPossible = s.Arrived.Contains(Actors.Hermit);
             return s;
+
+            void DiscoverArrival(Actors actor)
+            {
+                if (s.FixedDays.ContainsKey(actor) || actor == Actors.Blacksmith) s.Known.Add(actor);
+                else Discover(actor);
+            }
 
             void Add(Actors actor, int day, RaceEvent discovery)
             {
-                s.FixedDays.Add(actor, day);
+                s.FixedDays.Add(actor, NativeBookings.FixedDay(actor, day));
                 bool known = race.HasRaceEventFlag(discovery);
                 if (actor == Actors.Hermit)
                     known |= race.GetDialogData(actor).Count != 0 || DialogueManager.Instance.HasSpokenToThisRun(actor);
                 if (known) s.Known.Add(actor);
             }
-        }
 
-        private static bool CanOfferRecruit()
-        {
-            var unlocks = UnlockedUnitsManager.Instance;
-            var race = RaceManager.Instance.GetRace();
-            var banned = unlocks.GetBannedUnits();
-            foreach (string id in unlocks.GetUnlocked())
+            void Discover(Actors actor)
             {
-                if (banned.Contains(id) || !UnitManager.Instance.CanAddUnitTypeExclusive(id)) continue;
-                var unit = AddressablesManager.Instance.GetUnit(id);
-                if (unit != null && unit.GetRace() != race && unit.GetRace() != Races.Elemental) return true;
+                if (actor == Actors.None || s.Known.Contains(actor) || s.FixedDays.ContainsKey(actor) ||
+                    actor == Actors.WizardUnknown || Actor(actor) == null) return;
+                if (DialogueManager.Instance.HasSpokenToThisRun(actor) || race.GetDialogData(actor).Count > 0)
+                    s.Known.Add(actor);
             }
-            return false;
         }
 
-        internal static bool CaravanClaimRestored()
+        internal static CaravanDecision DailyCaravanDecision(int day)
         {
-            // Daily Caravan 0.1 owns replayed rewards. Read only the current scene's record.
-            if (!Chainloader.PluginInfos.TryGetValue(Daily, out var info) || info.Instance == null) return false;
+            if (!Chainloader.PluginInfos.TryGetValue(Daily, out var info) || info.Instance == null)
+                return CaravanDecision.Unavailable;
             var plugin = info.Instance;
             var type = plugin.GetType();
             if (!ReferenceEquals(AccessTools.Field(type, "scene")?.GetValue(plugin), GameDataManager.Instance) ||
-                !Equals(AccessTools.Field(type, "day")?.GetValue(plugin), DaytimeManager.Instance.CurrentDay())) return false;
-            var visit = AccessTools.Field(type, "Visit")?.GetValue(plugin);
-            return visit != null && !string.IsNullOrEmpty(AccessTools.Field(visit.GetType(), "selected")?.GetValue(visit) as string);
+                !Equals(AccessTools.Field(type, "day")?.GetValue(plugin), day))
+                return CaravanDecision.Unavailable;
+            return CaravanReplay.Read(AccessTools.Field(type, "Visit")?.GetValue(plugin));
         }
 
         internal static Actor Actor(Actors id) => DialogueManager.Instance.GetActor(id);
+        internal static UnityEngine.Sprite Portrait(Actors id)
+        {
+            var actor = Actor(id);
+            return actor != null ? actor.avatar : null;
+        }
         internal static string Title(Actors id)
         {
             var actor = Actor(id);
-            return actor != null ? actor.stringTitle.GetLocalizedString() : id.ToString();
+            if (actor != null)
+            {
+                foreach (var text in new[] { actor.stringTitle, actor.stringName })
+                    if (text != null && !text.IsEmpty)
+                    {
+                        string value = text.GetLocalizedString();
+                        if (!string.IsNullOrWhiteSpace(value)) return value;
+                    }
+                if (!string.IsNullOrWhiteSpace(actor.title)) return actor.title;
+            }
+            return Enum.IsDefined(typeof(Actors), id) ? id.ToString() : "Visitor";
         }
     }
 }

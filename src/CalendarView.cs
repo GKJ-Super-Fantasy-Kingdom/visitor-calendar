@@ -25,6 +25,7 @@ namespace VisitorCalendar
         private bool lastWasVisible;
         private int consumedFrame = -1;
         private int openedFrame;
+        private bool initialFocusPending;
 
         internal void Bind(Transform cells, GameObject finalDay, LocalizedString bossTitle, LocalizedString title)
         {
@@ -52,15 +53,26 @@ namespace VisitorCalendar
             if (icon != null && day < 29) icon.gameObject.SetActive(false);
             if (guests.Count == 0) return;
             var row = CalendarUi.Rect(cell, "Visitor portraits", new Vector2(44, 24), new Vector2(0, -6));
-            int size = Mathf.Min(24, 44 / guests.Count);
-            for (int i = 0; i < guests.Count; ++i)
+            int shown = Mathf.Min(guests.Count, 3);
+            int size = Mathf.Min(24, 44 / shown);
+            for (int i = 0; i < shown; ++i)
             {
                 var slot = CalendarUi.Rect(row, guests[i].ToString(), new Vector2(size, size),
-                    new Vector2((i - (guests.Count - 1) / 2f) * size, 0));
-                var image = CalendarUi.Image(slot, Color.white);
-                image.sprite = Visitors.Actor(guests[i])?.avatar;
-                image.enabled = image.sprite != null;
-                image.preserveAspect = true;
+                    new Vector2((i - (shown - 1) / 2f) * size, 0));
+                var sprite = Visitors.Portrait(guests[i]);
+                string marker = Schedule.CellMarker(sprite != null, i, guests.Count);
+                if (marker != null)
+                {
+                    var label = CalendarUi.Label(slot, font, size);
+                    label.text = marker;
+                    label.color = CalendarUi.Gold;
+                }
+                else
+                {
+                    var image = CalendarUi.Image(slot, Color.white);
+                    image.sprite = sprite;
+                    image.preserveAspect = true;
+                }
             }
             button.onClick.AddListener(() => Inspect(day));
         }
@@ -68,6 +80,7 @@ namespace VisitorCalendar
         internal void SelectToday()
         {
             openedFrame = Time.frameCount;
+            initialFocusPending = true;
             if (days.TryGetValue(schedule.Today, out var button) && button.isActiveAndEnabled)
             {
                 Plugin.Focus(button.gameObject);
@@ -79,13 +92,26 @@ namespace VisitorCalendar
         {
             if (openedFrame == Time.frameCount || consumedFrame == Time.frameCount ||
                 GamepadManager.Instance.IsGamepadInUse()) return;
-            var action = GamepadManager.Instance.GetPlayerInput()?.actions.FindAction("Overlay/Calendar");
+            var action = GamepadManager.Instance.GetPlayerInput()?.actions.FindAction(CalendarShortcut.KeyboardBackAction);
             if (action != null && action.WasPerformedThisFrame()) OverlayManager.Instance.Cancel();
         }
 
         private void LateUpdate()
         {
             var target = EventSystem.current?.currentSelectedGameObject;
+            // The input event that opened the overlay can reselect the HUD button
+            // after OnEnable. Recover once the native container is interactive.
+            if ((initialFocusPending || target == null || Plugin.IsPreviousFocus(target)) && grid != null &&
+                OverlayManager.Instance.IsCalendarOpen() && days.TryGetValue(schedule.Today, out var today))
+            {
+                if (details != null && details.gameObject.activeInHierarchy) Plugin.Focus(back.gameObject);
+                else if (today.isActiveAndEnabled && today.IsInteractable())
+                {
+                    Plugin.Focus(today.gameObject);
+                    initialFocusPending = false;
+                }
+                return;
+            }
             if (target != null && target.transform.IsChildOf(transform) &&
                 GamepadManager.Instance.GetGameObjectToSelect() != target)
                 GamepadManager.Instance.SetGameObjectToSelect(target, force: true);
@@ -93,23 +119,33 @@ namespace VisitorCalendar
 
         internal bool Hover(int day)
         {
-            if (!days.TryGetValue(day, out var cell)) return false;
+            if (!days.ContainsKey(day)) return false;
             if (details != null && details.gameObject.activeSelf) return true;
             var text = dayTitle.GetLocalizedString(day.ToString());
             if (day <= 28 && day % 7 == 0) text += "\n" + boss.GetLocalizedString();
             var appointments = schedule.ForDay(day);
-            if (appointments.Count == 0) text += "\nNo known appointments";
+            if (appointments.Count == 0) text += "\nNo Known Appointments";
             else
             {
                 foreach (var id in appointments)
                 {
                     text += "\n" + Visitors.Title(id);
-                    if (day == schedule.Today && VisitState.IsClaimed(id)) text += "  ·  Claimed today";
+                    text += "  ·  " + schedule.Status(day, id, day == schedule.Today && VisitState.IsClaimed(id));
                 }
-                text += "\n" + CalendarUi.WithBinding("UI/Submit", "Inspect");
+                text += "\nSelect day to inspect";
             }
-            TooltipManager.Instance.SetAnchor(TooltipManager.AnchorPresets.Top);
-            TooltipManager.Instance.Display(text, cell.transform.position);
+            var bounds = (RectTransform)grid;
+            var edge = bounds.TransformPoint(new Vector3(bounds.rect.xMin - 16, bounds.rect.center.y));
+            var tip = TooltipManager.Instance;
+            tip.StopFollowMouse();
+            if (edge.x >= 200 * SettingsManager.Instance.GetUIScaling())
+                tip.SetAnchor(TooltipManager.AnchorPresets.Right);
+            else
+            {
+                tip.SetAnchor(TooltipManager.AnchorPresets.Top);
+                edge = bounds.TransformPoint(new Vector3(bounds.rect.center.x, bounds.rect.yMin - 16));
+            }
+            tip.Display(text, edge, fix: false);
             return true;
         }
 
@@ -177,11 +213,11 @@ namespace VisitorCalendar
             heading.text = dayTitle.GetLocalizedString(inspected.ToString()) +
                 (choices.Count > 1 ? "  ·  " + (index + 1) + "/" + choices.Count : "");
             heading.color = CalendarUi.Gold;
-            portrait.sprite = Visitors.Actor(id)?.avatar;
+            portrait.sprite = Visitors.Portrait(id);
             portrait.enabled = portrait.sprite != null;
             nameLabel.text = Visitors.Title(id);
             bool claimed = inspected == schedule.Today && VisitState.IsClaimed(id);
-            status.text = claimed ? "Claimed today" : inspected == schedule.Today ? "Today's visit" : "Scheduled visit";
+            status.text = schedule.Status(inspected, id, claimed);
             status.color = claimed ? CalendarUi.Mint : Color.white;
             previous.gameObject.SetActive(choices.Count > 1);
             next.gameObject.SetActive(choices.Count > 1);

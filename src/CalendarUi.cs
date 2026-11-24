@@ -47,7 +47,7 @@ namespace VisitorCalendar
         {
             var player = GamepadManager.Instance?.GetPlayerInput();
             var action = player?.actions.FindAction(actionPath);
-            if (action == null) return "";
+            if (action == null || !action.enabled) return "";
             int i = action.GetBindingIndex(group: player.currentControlScheme);
             if (i < 0) return "";
             var path = action.bindings[i].effectivePath;

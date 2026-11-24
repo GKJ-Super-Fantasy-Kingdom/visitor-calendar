@@ -13,6 +13,7 @@ namespace VisitorCalendar
     [BepInPlugin(Id, "Visitor Calendar", "0.1.0")]
     [BepInDependency(Visitors.Weekly, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(Visitors.Daily, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(Visitors.Charters, BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class Plugin : BaseUnityPlugin
     {
         internal const string Id = "sfk.visitorcalendar";
@@ -24,9 +25,36 @@ namespace VisitorCalendar
             patches = new Harmony(Id);
             try { patches.PatchAll(typeof(Plugin).Assembly); }
             catch { patches.UnpatchSelf(); throw; }
+            WorldManager.OnGuestArriving += VisitState.Arrival;
             Logger.LogInfo("Visitor Calendar 0.1.0 ready.");
         }
-        private void OnDestroy() => patches?.UnpatchSelf();
+        private void OnDestroy()
+        {
+            WorldManager.OnGuestArriving -= VisitState.Arrival;
+            patches?.UnpatchSelf();
+        }
+
+        // The native calendar dereferences an invited actor while binding, before
+        // our view exists. An unregistered ID must not prevent opening the grid.
+        [HarmonyPatch(typeof(UICalendar), "GetGuestImage")]
+        private static class MissingActor
+        {
+            private static bool Prefix(int guestName) => Visitors.Actor((Actors)guestName) != null;
+        }
+
+        [HarmonyPatch(typeof(UICalendar), "GetGuestTitle")]
+        private static class MissingTitle
+        {
+            private static bool Prefix(int guestName, ref string __result)
+            {
+                if (guestName == 0) return true;
+                var id = (Actors)guestName;
+                var title = Visitors.Actor(id)?.stringTitle;
+                if (title != null && !title.IsEmpty) return true;
+                __result = Visitors.Title(id);
+                return false;
+            }
+        }
         internal static void LogWarning(Exception e) => log.LogWarning(e.Message);
 
         internal static void Focus(GameObject target)
@@ -38,6 +66,7 @@ namespace VisitorCalendar
         }
 
         private static GameObject returnTo;
+        internal static bool IsPreviousFocus(GameObject target) => target == returnTo;
         internal static CalendarView View;
 
         [HarmonyPatch(typeof(OverlayManager), nameof(OverlayManager.OpenCalendar))]

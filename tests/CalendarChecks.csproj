@@ -5,7 +5,7 @@
     <ProfileDir Condition="'$(ProfileDir)' == ''">$(APPDATA)\Thunderstore Mod Manager\DataFolder\SuperFantasyKingdom\profiles\Daybook Dev</ProfileDir>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../src/Schedule.cs" Link="Schedule.cs" />
+    <ProjectReference Include="../VisitorCalendar.csproj" />
     <Reference Include="Assembly-CSharp" HintPath="$(GameDir)\Super Fantasy Kingdom_Data\Managed\Assembly-CSharp.dll" />
     <Reference Include="Mono.Cecil" HintPath="$(ProfileDir)\BepInEx\core\Mono.Cecil.dll" />
   </ItemGroup>

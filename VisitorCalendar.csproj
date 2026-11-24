@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="src/*.cs" />
+    <InternalsVisibleTo Include="CalendarChecks" />
     <Reference Include="BepInEx;0Harmony" />
     <Reference Include="Assembly-CSharp;UnityEngine;UnityEngine.CoreModule;UnityEngine.UI;UnityEngine.UIModule;UnityEngine.TextRenderingModule;UnityEngine.InputLegacyModule;Unity.TextMeshPro;Unity.Localization;Unity.InputSystem;Unity.ResourceManager" />
   </ItemGroup>

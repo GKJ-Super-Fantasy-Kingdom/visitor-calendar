@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using BepInEx;
+using BepInEx.Bootstrap;
 using HarmonyLib;
 using SuperFantasyKingdom;
 using SuperFantasyKingdom.UI;
@@ -14,18 +14,41 @@ namespace VisitorCalendar
     {
         internal static readonly HashSet<Actors> Arrived = new HashSet<Actors>();
         internal static readonly HashSet<Actors> Claimed = new HashSet<Actors>();
-        internal static bool IsClaimed(Actors id) => Claimed.Contains(id) ||
-            (id == Actors.Caravan && Visitors.CaravanClaimRestored());
+        internal static readonly VisitHistory History = new VisitHistory();
+        internal static bool IsClaimed(Actors id)
+        {
+            if (id == Actors.Caravan)
+            {
+                var decision = Visitors.DailyCaravanDecision(DaytimeManager.Instance.CurrentDay());
+                if (decision != CaravanDecision.Unavailable) return decision == CaravanDecision.Claimed;
+            }
+            return Claimed.Contains(id);
+        }
         private static int day;
         private static GameDataManager scene;
 
         internal static void CheckDay(int currentDay)
         {
             if (scene != GameDataManager.Instance || day == currentDay) return;
+            Remember();
             day = currentDay;
             Arrived.Clear();
             Claimed.Clear();
         }
+
+        private static void Remember()
+        {
+            History.RecordCaravan(day, Visitors.DailyCaravanDecision(day));
+            foreach (var actor in Arrived) History.Record(day, actor, false);
+            foreach (var actor in Claimed) History.Record(day, actor, true);
+        }
+
+        // Tavern rewrites day and hash when advancing the same kingdom save.
+        // lastPlayed is generated for each kingdom checkpoint and survives that rewrite.
+        private static string HistoryPath(GameData data) =>
+            data == null || string.IsNullOrEmpty(data.runID) || string.IsNullOrEmpty(data.lastPlayed) ? null :
+            Path.Combine(Paths.ConfigPath, "VisitorCalendar", Helper.GenerateHash(string.Join("|",
+                SettingsManager.Instance.GetProfile(), data.runID, data.lastPlayed)) + ".visits");
 
         // A native save may represent the following dawn. Carry claims only into an
         // identical same-day checkpoint. A retry from an earlier dawn starts clean.
@@ -45,8 +68,23 @@ namespace VisitorCalendar
                 Claimed.Clear();
                 Arrived.Clear();
                 scene = null;
+                History.Days.Clear();
+                NativeBookings.BeginLoad();
                 try
                 {
+                    var history = HistoryPath(___m_GameData);
+                    if (history != null && File.Exists(history))
+                    {
+                        int today = ___m_GameData.day + 1;
+                        History.Restore(File.ReadAllLines(history), today);
+                        if (History.Days.TryGetValue(today, out var visits))
+                            foreach (var visit in visits)
+                            {
+                                Arrived.Add(visit.Key);
+                                if (visit.Value) Claimed.Add(visit.Key);
+                            }
+                        return;
+                    }
                     var path = PathFor(___m_GameData);
                     if (path == null || !File.Exists(path)) return;
                     foreach (string line in File.ReadAllLines(path))
@@ -67,14 +105,16 @@ namespace VisitorCalendar
         {
             private static void Postfix(GameDataManager __instance, GameData __result)
             {
-                if (__instance != scene || __result == null || __result.day + 1 != day || Claimed.Count == 0) return;
+                if (__instance != scene || __result == null) return;
+                Remember();
+                if (History.Days.Count == 0) return;
                 try
                 {
-                    string path = PathFor(__result);
+                    string path = HistoryPath(__result);
                     if (path == null) return;
                     Directory.CreateDirectory(Path.GetDirectoryName(path));
                     string temp = path + ".tmp";
-                    File.WriteAllLines(temp, Claimed.Select(actor => actor.ToString()));
+                    File.WriteAllLines(temp, History.Lines());
                     if (File.Exists(path)) File.Replace(temp, path, null);
                     else File.Move(temp, path);
                 }
@@ -83,20 +123,16 @@ namespace VisitorCalendar
             }
         }
 
-        [HarmonyPatch(typeof(Guest), "OnLoad")]
-        private static class Arrival
+        internal static void Arrival(Guest guest)
         {
-            private static void Postfix(Guest __instance)
-            {
-                var actor = Visitors.Identity(__instance);
-                if (actor != Actors.None) Arrived.Add(actor);
-            }
+            CheckDay(DaytimeManager.Instance.CurrentDay());
+            var actor = Visitors.Identity(guest);
+            if (actor != Actors.None) Arrived.Add(actor);
         }
 
         // Native merchant cards can show keywords, reroll, or cancel without granting
         // anything. Attribute a claim only when a card callback actually confirms.
-        private static Actors resolving;
-        private static bool confirmed;
+        private static CardResolution resolving;
         private static readonly AccessTools.FieldRef<UIOverlayMerchant, Action<int, ResourceAmount[]>> Callback =
             AccessTools.FieldRefAccess<UIOverlayMerchant, Action<int, ResourceAmount[]>>("m_Callback");
 
@@ -106,56 +142,59 @@ namespace VisitorCalendar
             private static void Postfix(UIOverlayMerchant __instance)
             {
                 var marker = __instance.GetComponent<MerchantSpeaker>();
-                if (marker != null) marker.IsHermit = false;
+                if (marker != null) marker.WeeklyOffer = false;
             }
         }
 
-        [HarmonyPatch(typeof(UIOverlayMerchant), nameof(UIOverlayMerchant.SetActor))]
-        private static class Speaker
+        [HarmonyPatch(typeof(UIOverlayMerchant), nameof(UIOverlayMerchant.SetCallback))]
+        private static class WeeklyOffer
         {
-            private static void Postfix(UIOverlayMerchant __instance, Actor __0)
+            private static void Postfix(UIOverlayMerchant __instance, Action<int, ResourceAmount[]> cb)
             {
-                if (__0 == null || __0 != Visitors.Actor(Actors.Hermit)) return;
+                var old = __instance.GetComponent<MerchantSpeaker>();
+                if (old != null) old.WeeklyOffer = false;
+                if (cb == null || !Chainloader.PluginInfos.TryGetValue(Visitors.Weekly, out var info) ||
+                    info.Instance == null || cb.Method.DeclaringType?.Assembly != info.Instance.GetType().Assembly) return;
                 var marker = __instance.GetComponent<MerchantSpeaker>() ?? __instance.gameObject.AddComponent<MerchantSpeaker>();
-                marker.IsHermit = true;
+                marker.WeeklyOffer = true;
+                CheckDay(DaytimeManager.Instance.CurrentDay());
+                Arrived.Add(Actors.Hermit);
             }
         }
 
         [HarmonyPatch(typeof(UICard), nameof(UICard.Callback))]
         private static class Resolve
         {
-            private static void Prefix(UICard __instance, out (Actors Actor, bool Confirmed) __state)
+            private static void Prefix(UICard __instance, out CardResolution __state)
             {
-                __state = (resolving, confirmed);
-                resolving = Actors.None;
-                confirmed = false;
+                __state = resolving;
+                resolving = default;
                 var screen = __instance.GetComponentInParent<UIOverlayMerchant>();
                 if (screen == null) return;
                 var callback = Callback(screen);
-                if (callback?.Target is Guest guest) resolving = Visitors.Identity(guest);
-                else if (screen.GetComponent<MerchantSpeaker>()?.IsHermit == true && __instance is UICardUnit)
-                    resolving = Actors.Hermit;
+                if (callback?.Target is Guest guest) resolving.Actor = Visitors.Identity(guest);
+                else if (screen.GetComponent<MerchantSpeaker>()?.WeeklyOffer == true && __instance is UICardUnit)
+                    resolving.Actor = Actors.Hermit;
             }
-            private static void Finalizer((Actors Actor, bool Confirmed) __state, Exception __exception)
+            private static void Finalizer(CardResolution __state, Exception __exception)
             {
-                if (__exception == null && confirmed && resolving != Actors.None) Claimed.Add(resolving);
-                resolving = __state.Actor;
-                confirmed = __state.Confirmed;
+                resolving.Finish(Claimed, __exception == null);
+                resolving = __state;
             }
         }
 
         [HarmonyPatch(typeof(OverlayManager), nameof(OverlayManager.Confirm))]
         private static class Confirm
         {
-            private static void Postfix()
+            private static void Postfix(bool __runOriginal)
             {
-                if (resolving != Actors.None) confirmed = true;
+                if (__runOriginal) resolving.Confirmed = true;
             }
         }
     }
 
     internal sealed class MerchantSpeaker : MonoBehaviour
     {
-        internal bool IsHermit;
+        internal bool WeeklyOffer;
     }
 }

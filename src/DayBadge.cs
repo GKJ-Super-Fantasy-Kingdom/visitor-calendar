@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using SuperFantasyKingdom;
 using TMPro;
 using UnityEngine;
@@ -12,7 +13,13 @@ namespace VisitorCalendar
         private RectTransform panel;
         private TMP_FontAsset font;
         private float refresh;
+        private bool shortcutVisible;
+        private GameInputManager mapInput;
+        private static readonly AccessTools.FieldRef<GameInputManager, Button> NativeCalendarButton =
+            AccessTools.FieldRefAccess<GameInputManager, Button>("calendarButton");
         private string lastKey;
+        private RectTransform foodDropdown;
+        private readonly Vector3[] corners = new Vector3[4];
 
         internal static void Attach(Transform day)
         {
@@ -21,30 +28,73 @@ namespace VisitorCalendar
             rect.pivot = new Vector2(1, 1);
             rect.anchorMin = rect.anchorMax = new Vector2(1, 0);
             rect.anchoredPosition = new Vector2(0, -2);
+            if (day.GetComponent<SuperFantasyKingdom.UI.UIClockButtonDay>() != null)
+            {
+                // The speed control and its binding prompt sit directly below Day.
+                rect.anchorMin = rect.anchorMax = Vector2.zero;
+                rect.anchoredPosition = new Vector2(-8, -2);
+            }
             var self = rect.gameObject.AddComponent<DayBadge>();
             self.panel = rect;
+            self.mapInput = FindObjectOfType<GameInputManager>();
+            // The shipped HUD names its expandable food stock panel "Dropwdown".
+            for (var parent = day.parent; parent != null && self.foodDropdown == null; parent = parent.parent)
+                self.foodDropdown = parent.Find("HeaderNEW/PanelFood/Dropwdown") as RectTransform;
             self.font = day.GetComponentInChildren<TextMeshProUGUI>(true)?.font;
             CalendarUi.Image(rect, CalendarUi.Panel, true);
         }
 
+        private void LateUpdate()
+        {
+            if (foodDropdown == null) return;
+            var day = (RectTransform)panel.parent;
+            var position = panel.anchoredPosition;
+            float top = -2;
+            if (foodDropdown.gameObject.activeInHierarchy)
+            {
+                panel.GetWorldCorners(corners);
+                float left = day.InverseTransformPoint(corners[0]).x;
+                float right = day.InverseTransformPoint(corners[2]).x;
+                foodDropdown.GetWorldCorners(corners);
+                Vector3 min = day.InverseTransformPoint(corners[0]);
+                Vector3 max = day.InverseTransformPoint(corners[2]);
+                if (min.x < right && max.x > left)
+                    top = Mathf.Min(top, min.y - day.rect.yMin - 6);
+            }
+            if (!Mathf.Approximately(position.y, top))
+                panel.anchoredPosition = new Vector2(position.x, top);
+        }
+
         private void Update()
         {
-            if (Time.unscaledTime < refresh) return;
-            refresh = Time.unscaledTime + .75f;
             if (GameManager.Instance == null || !GameManager.Instance.IsGameLoaded() ||
                 GameManager.Instance.IsUnloading() || DialogueManager.Instance == null ||
                 DaytimeManager.Instance == null || WorldManager.Instance == null) return;
+            if (!mapInput && Time.unscaledTime >= refresh) mapInput = FindObjectOfType<GameInputManager>();
+            var nativeButton = mapInput ? NativeCalendarButton(mapInput) : null;
+            bool showShortcut = CalendarShortcut.CanAdvertise(nativeButton && nativeButton.IsInteractable(),
+                UIManager.Instance.IsWorldInteractable(), UIManager.Instance.CheatsEnabled(), Input.GetKey(KeyCode.LeftControl));
+            if (Time.unscaledTime < refresh && shortcutVisible == showShortcut) return;
+            refresh = Time.unscaledTime + .75f;
+            shortcutVisible = showShortcut;
             var schedule = Visitors.Read();
             var visits = schedule.ForDay(schedule.Today);
-            string prompt = CalendarUi.WithBinding("Game/Calendar", "Calendar");
+            // The map action is unavailable in merchant, contract and calendar overlays.
+            string prompt = showShortcut
+                ? CalendarUi.WithBinding(CalendarShortcut.OpenAction, "Calendar") : "Calendar";
             string key = prompt;
-            foreach (var actor in visits) key += "|" + actor + VisitState.IsClaimed(actor) + Visitors.Title(actor);
+            foreach (var actor in visits)
+            {
+                var sprite = Visitors.Portrait(actor);
+                key += "|" + actor + ":" + (sprite != null ? sprite.GetInstanceID() : 0) +
+                    ":" + schedule.Status(schedule.Today, actor, VisitState.IsClaimed(actor)) + ":" + Visitors.Title(actor);
+            }
             if (key == lastKey) return;
             lastKey = key;
-            Redraw(visits, prompt);
+            Redraw(visits, prompt, schedule);
         }
 
-        private void Redraw(List<Actors> visits, string prompt)
+        private void Redraw(List<Actors> visits, string prompt, Schedule schedule)
         {
             foreach (Transform child in panel) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
             int width = visits.Count == 0 ? 126 : 158;
@@ -56,13 +106,13 @@ namespace VisitorCalendar
                 var actor = visits[i];
                 int top = 22 + i * 31;
                 var image = CalendarUi.Image(Row("Portrait", 4, 28, 28, top), Color.white);
-                image.sprite = Visitors.Actor(actor)?.avatar;
+                image.sprite = Visitors.Portrait(actor);
                 image.enabled = image.sprite != null;
                 image.preserveAspect = true;
                 bool claimed = VisitState.IsClaimed(actor);
                 var label = CalendarUi.Label(Row("Appointment", 36, width - 38, 30, top), font, 15);
                 label.alignment = TextAlignmentOptions.MidlineLeft;
-                label.text = Visitors.Title(actor) + (claimed ? "\n✓ Claimed today" : "");
+                label.text = Visitors.Title(actor) + "\n" + schedule.Status(schedule.Today, actor, claimed);
                 if (claimed) label.color = CalendarUi.Mint;
             }
         }
