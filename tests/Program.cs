@@ -79,7 +79,8 @@ Expect(12, added);
 schedule.SharedArrivalOverride = false;
 Expect(21, added);
 if (Schedule.CellMarker(false, 0, 2) != "•" || Schedule.CellMarker(true, 1, 2) != null ||
-    Schedule.CellMarker(false, 2, 7) != "+5") throw new Exception("Missing portrait or overlap marker");
+    Schedule.CellMarker(false, 2, 7) != "+5" || Schedule.CellMarker(true, 1, 3, 2) != "+2" ||
+    Schedule.CellMarker(true, 1, 2, 2) != null) throw new Exception("Missing portrait or overlap marker");
 var claims = new HashSet<Actors>();
 new CardResolution { Actor = Actors.Hermit }.Finish(claims, true);
 new CardResolution { Confirmed = true }.Finish(claims, true);
@@ -112,7 +113,65 @@ schedule.FixedDays[Actors.Caravan] = 16;
 Expect(16, Actors.Hermit);
 schedule.History.Record(5, Actors.Caravan, false);
 Expect(5, Actors.Merchant, Actors.Caravan);
+schedule.AllowBeforeGiantGate = true;
+schedule.CaravanStart = 17;
+Expect(16, Actors.Hermit); // The separate native booking still requires the gate.
+schedule.Known.Remove(Actors.Caravan);
+Expect(17, Actors.Caravan); // An explicitly enabled extra wagon can be forecast before discovery.
+schedule.CaravanStart = 7;
+Expect(7);
+schedule.CaravansUnlocked = true;
+Expect(7, Actors.Caravan);
+schedule.Challenge = true;
+Expect(7);
+schedule.Challenge = false;
+schedule.CaravanStart = 0;
+Expect(17);
 Console.WriteLine("Observed history, distinct claims, rollback and forecast checks passed.");
+
+var orders = new Schedule { Today = 16, LastDay = 28 };
+orders.Known.Add(Actors.Caravan);
+orders.History.Record(16, Actors.Caravan, true);
+orders.FixedDays[Actors.Caravan] = 20;
+orders.Invitations[2] = (int)Actors.Caravan;
+int confirmedDay = -1;
+bool orderPending = true;
+bool Commission(out int day) { day = confirmedDay; return orderPending; }
+bool Due(out string title, out int quantity, out string resource, out int deadline)
+{
+    title = "Bread for the Watch"; quantity = 6; resource = "Bread"; deadline = 20;
+    return true;
+}
+var sharedDate = CalendarNotice.Read(orders, Due, Commission, e => throw e);
+if (sharedDate.Count != 2 || sharedDate.Any(n => n.Day != 20) || sharedDate[0].IsCommission ||
+    !sharedDate[1].IsCommission || !orders.ForDay(20).Contains(Actors.Caravan))
+    throw new Exception("A shared date must retain separate deadline, commission and visitor cues");
+void CheckCommission(string title, int? day)
+{
+    var entry = CalendarNotice.Read(orders, null, Commission, e => throw e).Single();
+    if (entry.Title != title || entry.Day != day) throw new Exception($"Wrong commission: {entry.Title} on {entry.Day}");
+}
+CheckCommission("Commission Forecast", 20);
+orders.ConsumedCaravanDay = 20;
+CheckCommission("Commission Forecast", 21);
+orders.SharedArrivalOverride = true;
+CheckCommission("Next Caravan", null);
+confirmedDay = 16;
+CheckCommission("Commission Delivery", 16); // A distinct, eligible visit confirmed by the provider.
+confirmedDay = -1;
+orders.SharedArrivalOverride = false;
+orders.CaravanGateOpened = false;
+CheckCommission("Next Caravan", null);
+orders.CaravanGateOpened = true;
+orders.LastDay = 18;
+orders.CaravanStart = 17;
+CheckCommission("Commission Forecast", 17);
+orders.Challenge = true;
+CheckCommission("Next Caravan", null);
+orderPending = false;
+if (CalendarNotice.Read(orders, null, Commission, e => throw e).Count != 0 ||
+    !orders.History.Days[16][Actors.Caravan]) throw new Exception("Clearing an order changed visit history");
+Console.WriteLine("Commission checks passed (distinct visit today, bookings, opaque dates, gate, daily and challenge).");
 
 void Expect(int day, params Actors[] expected)
 {
@@ -225,17 +284,19 @@ if (args.Length >= 3)
     int scenarios = 0;
     foreach (bool challenge in new[] { false, true })
     foreach (bool known in new[] { false, true })
+    foreach (bool allowBeforeGate in new[] { false, true })
     foreach (bool priorUnlock in new[] { false, true })
     foreach (int interval in new[] { 1, 5, 7, 365 })
     foreach (int firstDay in new[] { 1, 10, 16, 999 })
     for (int day = 1; day <= 29; day++)
     {
         var model = new Schedule { Today = day, LastDay = 29, Challenge = challenge, HermitInterval = interval,
-            CaravanStart = firstDay, CaravansUnlocked = priorUnlock || day > 14 };
+            CaravanStart = firstDay, CaravanGateOpened = known, AllowBeforeGiantGate = allowBeforeGate,
+            CaravansUnlocked = priorUnlock || day > 14 };
         if (known) model.Known.UnionWith(new[] { Actors.Hermit, Actors.Caravan });
         var visits = model.ForDay(day);
         bool hermit = known && (bool)weekly.Invoke(null, new object[] { day, interval, challenge });
-        bool caravan = (bool)daily.Invoke(null, new object[] { day, firstDay, known, model.CaravansUnlocked, challenge });
+        bool caravan = (bool)daily.Invoke(null, new object[] { day, firstDay, known || allowBeforeGate, model.CaravansUnlocked, challenge });
         if (visits.Contains(Actors.Hermit) != hermit || visits.Contains(Actors.Caravan) != caravan)
             throw new Exception($"Companion schedule mismatch at day {day}");
         scenarios++;

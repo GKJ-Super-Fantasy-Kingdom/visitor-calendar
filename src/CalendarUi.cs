@@ -43,6 +43,13 @@ namespace VisitorCalendar
             return label;
         }
 
+        internal static void Sprite(RectTransform rect, Sprite sprite)
+        {
+            var image = Image(rect, Color.white);
+            image.sprite = sprite;
+            image.preserveAspect = true;
+        }
+
         internal static string Binding(string actionPath)
         {
             var player = GamepadManager.Instance?.GetPlayerInput();

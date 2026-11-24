@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace VisitorCalendar
 {
-    [BepInPlugin(Id, "Visitor Calendar", "0.1.0")]
+    [BepInPlugin(Id, "Visitor Calendar", "0.1.2")]
     [BepInDependency(Visitors.Weekly, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(Visitors.Daily, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(Visitors.Charters, BepInDependency.DependencyFlags.SoftDependency)]
@@ -19,6 +19,7 @@ namespace VisitorCalendar
         internal const string Id = "sfk.visitorcalendar";
         private static ManualLogSource log;
         private Harmony patches;
+        private void Start() => PartnerCalendar.Bind();
         private void Awake()
         {
             log = Logger;
@@ -26,12 +27,13 @@ namespace VisitorCalendar
             try { patches.PatchAll(typeof(Plugin).Assembly); }
             catch { patches.UnpatchSelf(); throw; }
             WorldManager.OnGuestArriving += VisitState.Arrival;
-            Logger.LogInfo("Visitor Calendar 0.1.0 ready.");
+            Logger.LogInfo("Visitor Calendar 0.1.2 ready.");
         }
         private void OnDestroy()
         {
             WorldManager.OnGuestArriving -= VisitState.Arrival;
             patches?.UnpatchSelf();
+            RestoreMinimizedControls();
         }
 
         // The native calendar dereferences an invited actor while binding, before
@@ -66,6 +68,17 @@ namespace VisitorCalendar
         }
 
         private static GameObject returnTo;
+        private static OverlayManager minimizedOwner;
+        private static GameObject hiddenMinimizedControls;
+
+        private static void RestoreMinimizedControls()
+        {
+            // The game may have already reopened or discarded the backup.
+            if (hiddenMinimizedControls && minimizedOwner && minimizedOwner.HasMinimizedOverlay())
+                hiddenMinimizedControls.SetActive(true);
+            hiddenMinimizedControls = null;
+            minimizedOwner = null;
+        }
         internal static bool IsPreviousFocus(GameObject target) => target == returnTo;
         internal static CalendarView View;
 
@@ -77,8 +90,17 @@ namespace VisitorCalendar
                 returnTo = EventSystem.current?.currentSelectedGameObject;
                 if (returnTo == null) returnTo = GamepadManager.Instance.GetGameObjectToSelect();
             }
-            private static void Postfix(Transform __result)
+            private static void Postfix(OverlayManager __instance, Transform __result, GameObject ___openMinimizedButton)
             {
+                // The clock can open the calendar while a merchant is minimized. Its
+                // reopen button and prompt share a separate root with their own input.
+                if (__instance.IsCalendarOpen() && __instance.HasMinimizedOverlay() &&
+                    ___openMinimizedButton && ___openMinimizedButton.activeSelf)
+                {
+                    minimizedOwner = __instance;
+                    hiddenMinimizedControls = ___openMinimizedButton;
+                    hiddenMinimizedControls.SetActive(false);
+                }
                 if (View != null && View.transform == __result) View.SelectToday();
             }
         }
@@ -131,7 +153,13 @@ namespace VisitorCalendar
             private static void Postfix(OverlayManager __instance, bool __state)
             {
                 if (!__state || __instance.IsCalendarOpen()) return;
-                if (returnTo != null && returnTo.activeInHierarchy) Focus(returnTo);
+                var picker = minimizedOwner == __instance && hiddenMinimizedControls && __instance.HasMinimizedOverlay()
+                    ? hiddenMinimizedControls.transform.Find("Button")?.GetComponent<Button>() : null;
+                if (minimizedOwner == __instance) RestoreMinimizedControls();
+                var previous = returnTo ? returnTo.GetComponent<Selectable>() : null;
+                if (returnTo && returnTo.activeInHierarchy && (!previous || previous.IsInteractable())) Focus(returnTo);
+                else if (picker && picker.isActiveAndEnabled && picker.IsInteractable() && GamepadManager.Instance.IsGamepadInUse())
+                    Focus(picker.gameObject);
                 View = null;
                 returnTo = null;
             }

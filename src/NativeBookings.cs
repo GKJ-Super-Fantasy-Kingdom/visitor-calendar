@@ -61,10 +61,18 @@ namespace VisitorCalendar
                 .Any(patch => patch.owner != Plugin.Id &&
                     !(actor == Actors.Hermit && patch.owner == Visitors.Weekly) &&
                     !(actor == Actors.Caravan && (patch.owner == Visitors.Daily || patch.owner == Visitors.Charters)) &&
-                    // This prefix records the caravan instance and never changes the arrival decision.
-                    !(type == typeof(Guest) && name == "OnLoad" && patch.owner == "gkj.sfk.caravancommissions" &&
-                      patch.PatchMethod.DeclaringType?.FullName == "CaravanCommissions.Plugin+Arrival" &&
-                      patch.PatchMethod.Name == "Prefix"));
+                    !CommissionObserver(type, name, patch.owner, patch.PatchMethod));
+        }
+
+        internal static bool CommissionObserver(Type type, string target, string owner, MethodInfo hook)
+        {
+            if (owner != PartnerCalendar.CommissionsId || target != "OnLoad") return false;
+            // These hooks identify a distinct visit and unwind the dispatch scope.
+            // None replaces the game's scheduling decision.
+            string declaring = hook.DeclaringType?.FullName;
+            return (type == typeof(Guest) && declaring == "CaravanCommissions.Plugin+Arrival" && hook.Name == "Prefix") ||
+                (type == typeof(GuestCaravan) && declaring == "CaravanCommissions.Plugin+ScheduledArrival" &&
+                 (hook.Name == "Prefix" || hook.Name == "Finalizer"));
         }
 
         internal static int FixedDay(Actors actor, int authored)

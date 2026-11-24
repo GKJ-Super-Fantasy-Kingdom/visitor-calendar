@@ -40,12 +40,12 @@ namespace VisitorCalendar
             }
         }
 
-        private static int Setting(string guid, string key)
+        private static T Setting<T>(string guid, string key, T fallback)
         {
             if (Chainloader.PluginInfos.TryGetValue(guid, out var info) && info.Instance != null &&
-                info.Instance.Config.TryGetEntry<int>(new ConfigDefinition("Schedule", key), out var value))
+                info.Instance.Config.TryGetEntry<T>(new ConfigDefinition("Schedule", key), out var value))
                 return value.Value;
-            return 0;
+            return fallback;
         }
 
         internal static Schedule Read()
@@ -56,7 +56,8 @@ namespace VisitorCalendar
             var challenge = MainManager.Instance.IsChallenge() ? ChallengeManager.Instance.GetLoadedChallenge() : null;
             var s = new Schedule {
                 Today = clock.CurrentDay(), LastDay = clock.GetDayLimit(), Challenge = challenge != null,
-                HermitInterval = Setting(Weekly, "IntervalDays"), CaravanStart = Setting(Daily, "FirstDay"),
+                HermitInterval = Setting(Weekly, "IntervalDays", 0), CaravanStart = Setting(Daily, "FirstDay", 0),
+                AllowBeforeGiantGate = Setting(Daily, "AllowBeforeGiantGate", false),
                 History = VisitState.History, CaravanGateOpened = race.HasRaceEventFlag(RaceEvent.GateOpened),
                 CaravansUnlocked = WorldManager.Instance.HasUnlockedCaravans()
             };

@@ -15,6 +15,7 @@ namespace VisitorCalendar
         internal VisitHistory History = new VisitHistory();
         internal bool SharedArrivalOverride;
         internal bool CaravanGateOpened = true;
+        internal bool AllowBeforeGiantGate;
         internal int ConsumedCaravanDay;
         internal bool PendingMerchantCharter;
         internal bool VanillaCaravanUnlock = true;
@@ -42,18 +43,18 @@ namespace VisitorCalendar
             if (!Challenge && HermitInterval > 0 && day > 2 && (day - 2) % HermitInterval == 0 &&
                 (day != Today || HermitOfferPossible))
                 Add(Actors.Hermit);
-            if (!Challenge && CaravanGateOpened && CaravanStart > 0 && day >= CaravanStart &&
+            if (!Challenge && CaravanStart > 0 && day >= CaravanStart &&
                 (VanillaCaravanUnlock ? CaravansUnlocked || day > 14 : day == Today && CaravansUnlocked))
-                Add(Actors.Caravan);
+                Add(Actors.Caravan, beforeGate: AllowBeforeGiantGate);
             if (day == Today)
                 foreach (var actor in Arrived) Add(actor, observed: true);
             return result;
 
-            void Add(Actors actor, bool observed = false)
+            void Add(Actors actor, bool observed = false, bool beforeGate = false)
             {
                 if (!observed && (SharedArrivalOverride || ArrivalOnly.Contains(actor) ||
-                    (actor == Actors.Caravan && (!CaravanGateOpened || day == ConsumedCaravanDay || CanStillMove(day))))) return;
-                if (Known.Contains(actor) && !result.Contains(actor)) result.Add(actor);
+                    (actor == Actors.Caravan && ((!CaravanGateOpened && !beforeGate) || day == ConsumedCaravanDay || CanStillMove(day))))) return;
+                if ((Known.Contains(actor) || beforeGate) && !result.Contains(actor)) result.Add(actor);
             }
         }
 
@@ -67,9 +68,9 @@ namespace VisitorCalendar
             return "Forecast";
         }
 
-        internal static string CellMarker(bool hasPortrait, int index, int count)
+        internal static string CellMarker(bool hasPortrait, int index, int count, int slots = 3)
         {
-            if (index == 2 && count > 3) return "+" + (count - 2);
+            if (count > slots && index == slots - 1) return "+" + (count - index);
             return hasPortrait ? null : "•";
         }
 
