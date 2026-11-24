@@ -19,7 +19,7 @@ dll = root / "bin" / "Release" / framework / "VisitorCalendar.dll"
 files = {
     "LICENSE": root / "LICENSE",
     "manifest.json": listing / "manifest.json",
-    "README.md": root / "README.md",
+    "README.md": listing / "README.md",
     "CHANGELOG.md": root / "CHANGELOG.md",
     "icon.png": listing / "icon.png",
     "plugins/VisitorCalendar.dll": dll,
