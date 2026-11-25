@@ -25,19 +25,17 @@ Open the calendar beside the day display to see when familiar visitors are expec
 
 *1.5× UI scale. Day 24 is the first eligible daily wagon in this kingdom. Its portrait shows what is expected tomorrow. Today’s day-23 badge shows the Hermit.*
 
-Captured in Super Fantasy Kingdom 0.8.068 with Visitor Calendar 0.1.2 on a copied save. The game used a virtual Xbox controller layout and automated date selection. [Daily Caravan](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/DailyCaravan/) 0.1.3 was set to `FirstDay = 24` and `AllowBeforeGiantGate = true`.
+For an eligible kingdom with `FirstDay = 24` and the early-gate option on, the forecast starts on Day 24.
 
 ## Compatibility
 
-- Visitor Calendar works with the base game. Companion mods are optional.
-- In ordinary kingdoms, [Weekly Hermit](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/WeeklyHermit/) sets the interval between repeat visits. On the day of a repeat visit, the Hermit appears once a recruit offer opens.
-- [Daily Caravan](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/DailyCaravan/) sets the first extra caravan day in ordinary kingdoms. Forecasts follow its `FirstDay` and `AllowBeforeGiantGate` settings and the game's caravan progression. Earlier missed dates stay empty. After reloading a dawn, a recorded decline still counts as a visit and a selected reward counts as a claim.
-- The Merchant charter in [Kingdom Charters](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/KingdomCharters/) can bring the first caravan one day early if the gate is open and the guest slot is free. The calendar waits until the date is settled. [Daily Caravan](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/DailyCaravan/) takes precedence if both are installed.
-- With [Weekly Contracts](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/WeeklyContracts/) 0.1.2 or later, **Delivery Due** appears on the accepted contract’s deadline until you deliver or the contract expires. Inspect the entry for the order, quantity and resource. The calendar’s contract button still opens the contract.
-- With [Caravan Commissions](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/CaravanCommissions/) 0.1.1 or later, an outstanding prepaid order shows **Commission Forecast** on the next known item-caravan date. An earlier invitation can change when it arrives. **Commission Delivery** means today’s item caravan can fulfill the order. If the date is unknown, **Next Caravan** stays separate from the dated visits.
-- With LowEyeCue’s [Berry God’s Blessing](https://thunderstore.io/c/super-fantasy-kingdom/p/LowEyeCue/BerryGodsBlessing/) 0.1.0, the Hermit can announce a blessing. That announcement alone leaves the calendar and claim history unchanged.
-- With ownlyme’s [Right Click Skip](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/RightClickSkip/) 1.2.0, skipping the new-day caption leaves the day’s appointments visible. An offer is marked claimed only when you take it.
-- For other guest mods, the calendar forecasts a date only when it can identify a reliable booking. A known visitor can still appear after an observed arrival. If a portrait is missing, look for a dot on the date.
+- Works with Super Fantasy Kingdom **0.8.068** and the other [GKJ mods](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/).
+- [Weekly Hermit](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/WeeklyHermit/) repeat visits and [Daily Caravan](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/DailyCaravan/) forecasts follow their schedules. The caravan forecast uses the configured first day, early-gate option, and kingdom progression. Unrecorded past dates stay empty.
+- The Merchant Charter in [Kingdom Charters](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/KingdomCharters/) can move the first caravan forward when eligible. Daily Caravan takes precedence when both are installed.
+- [Weekly Contracts](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/WeeklyContracts/) 0.1.2 or later shows **Delivery Due** on the accepted contract’s deadline. [Caravan Commissions](https://thunderstore.io/c/super-fantasy-kingdom/p/GKJ/CaravanCommissions/) 0.1.1 or later shows the next known delivery date, or **Next Caravan** when the date is unknown.
+- [Berry God's Blessing](https://thunderstore.io/c/super-fantasy-kingdom/p/LowEyeCue/BerryGodsBlessing/) can announce a blessing without adding a visit or claim to the calendar.
+- With [Right Click Skip](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/RightClickSkip/), skipping the dawn caption leaves appointments visible. For other mods, the calendar needs a known schedule or an observed visit.
+- These community mods can share the same profile. [Achievement Enabler](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/AchievementEnabler/), [Bakery Uses Wheat](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/BakeryUsesWheat/), [More Relics](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/MoreRelics/), [Right Click Skip](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/RightClickSkip/), and [Tavern Food Priorities](https://thunderstore.io/c/super-fantasy-kingdom/p/ownlyme/TavernFoodPriorities/).
 
 ## Installation
 

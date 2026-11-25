@@ -1,3 +1,7 @@
+# 0.1.3
+
+Clarify the mod’s description and compatibility for players.
+
 # 0.1.2
 
 - Follow Daily Caravan’s first-day and early-gate settings when forecasting wagons. In an eligible kingdom, enabling early wagons adds forecasts from the configured day onward. Earlier dates still show only recorded visits.
