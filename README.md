@@ -48,3 +48,7 @@ Captured in Super Fantasy Kingdom 0.8.068 with Visitor Calendar 0.1.2 on a copie
 Bug reports and pull requests are welcome. See the [contribution guide](https://github.com/GKJ-Super-Fantasy-Kingdom/visitor-calendar/blob/main/CONTRIBUTING.md) for local testing and reporting instructions.
 
 The original mod code is available under the [MIT License](https://github.com/GKJ-Super-Fantasy-Kingdom/visitor-calendar/blob/main/LICENSE). Super Fantasy Kingdom, its game assets, and third-party dependencies retain their respective licenses and ownership.
+
+## Support
+
+[Support GKJ Games on Ko-fi](https://ko-fi.com/gkj_games)

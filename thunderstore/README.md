@@ -44,3 +44,7 @@ Captured in Super Fantasy Kingdom 0.8.068 with Visitor Calendar 0.1.2 on a copie
 1. Open Thunderstore Mod Manager or r2modman and select your Super Fantasy Kingdom profile.
 2. Install **VisitorCalendar** with its listed dependencies, [BepInExPack](https://thunderstore.io/c/super-fantasy-kingdom/p/BepInEx/BepInExPack/) and [HideManagerGameObject Config](https://thunderstore.io/c/super-fantasy-kingdom/p/BepInEx/HideManagerGameObject_Config/). If you have the local ZIP, use **Import local mod** in that profile.
 3. Start the game modded and look for the calendar badge beside the day display once your kingdom loads.
+
+## Support
+
+[Support GKJ Games on Ko-fi](https://ko-fi.com/gkj_games)
