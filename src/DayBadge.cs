@@ -8,12 +8,15 @@ using UnityEngine.UI;
 
 namespace VisitorCalendar
 {
-    internal sealed class DayBadge : MonoBehaviour, IPointerClickHandler
+    internal sealed class DayBadge : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler,
+        IPointerDownHandler
     {
         private RectTransform panel;
+        private RectTransform frame, outline;
         private TMP_FontAsset font;
         private float refresh;
         private bool shortcutVisible;
+        private bool hovered;
         private GameInputManager mapInput;
         private static readonly AccessTools.FieldRef<GameInputManager, Button> NativeCalendarButton =
             AccessTools.FieldRefAccess<GameInputManager, Button>("calendarButton");
@@ -41,11 +44,15 @@ namespace VisitorCalendar
             for (var parent = day.parent; parent != null && self.foodDropdown == null; parent = parent.parent)
                 self.foodDropdown = parent.Find("HeaderNEW/PanelFood/Dropwdown") as RectTransform;
             self.font = day.GetComponentInChildren<TextMeshProUGUI>(true)?.font;
-            CalendarUi.Image(rect, CalendarUi.Panel, true);
+            CalendarUi.FooterSurface(rect, CalendarUi.Panel);
+            self.frame = CalendarUi.ControlRim(rect, "Calendar frame", Color.black);
+            self.outline = CalendarUi.ControlRim(rect, "Calendar hover", Color.white, -1);
+            self.outline.gameObject.SetActive(false);
         }
 
         private void LateUpdate()
         {
+            outline.gameObject.SetActive(hovered && CanOpen());
             if (foodDropdown == null) return;
             var day = (RectTransform)panel.parent;
             var position = panel.anchoredPosition;
@@ -96,24 +103,30 @@ namespace VisitorCalendar
 
         private void Redraw(List<Actors> visits, string prompt, Schedule schedule)
         {
-            foreach (Transform child in panel) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            foreach (Transform child in panel)
+            {
+                if (child == frame || child == outline) continue;
+                child.gameObject.SetActive(false);
+                Destroy(child.gameObject);
+            }
             int width = visits.Count == 0 ? 126 : 158;
             panel.sizeDelta = new Vector2(width, 22 + visits.Count * 31);
             var title = Row("Calendar", 0, width - 4, 20, 0);
-            CalendarUi.Label(title, font, 15).text = prompt;
+            var calendar = CalendarUi.Label(title, font, 15);
+            calendar.text = prompt;
+            calendar.color = CalendarUi.Gold;
             for (int i = 0; i < visits.Count; i++)
             {
                 var actor = visits[i];
                 int top = 22 + i * 31;
-                var image = CalendarUi.Image(Row("Portrait", 4, 28, 28, top), Color.white);
-                image.sprite = Visitors.Portrait(actor);
-                image.enabled = image.sprite != null;
-                image.preserveAspect = true;
-                bool claimed = VisitState.IsClaimed(actor);
-                var label = CalendarUi.Label(Row("Appointment", 36, width - 38, 30, top), font, 15);
+                CalendarUi.AppointmentArt(Row("Portrait", 4, 28, 28, top), Visitors.Portrait(actor), false);
+                var label = CalendarUi.Label(Row("Appointment", 36, width - 40, 16, top), font, 15);
                 label.alignment = TextAlignmentOptions.MidlineLeft;
-                label.text = Visitors.Title(actor) + "\n" + schedule.Status(schedule.Today, actor, claimed);
-                if (claimed) label.color = CalendarUi.Mint;
+                label.text = Visitors.Title(actor);
+                var status = CalendarUi.Label(Row("Status", 36, width - 40, 14, top + 15), font, 15);
+                status.alignment = TextAlignmentOptions.MidlineLeft;
+                status.text = schedule.Status(schedule.Today, actor, VisitState.IsClaimed(actor));
+                status.color = CalendarUi.VisitColor(status.text);
             }
         }
 
@@ -127,12 +140,28 @@ namespace VisitorCalendar
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button != PointerEventData.InputButton.Left || !UIManager.Instance.IsWorldInteractable()) return;
-            if (OverlayManager.Instance.IsOpen()) return;
+            if (eventData.button != PointerEventData.InputButton.Left || !CanOpen()) return;
             var button = transform.parent.GetComponent<Button>();
-            if (button != null && !button.IsInteractable()) return;
             if (button != null) Plugin.Focus(button.gameObject);
             OverlayManager.Instance.OpenCalendar();
+            Plugin.View?.UsePointer();
+        }
+
+        public void OnPointerEnter(PointerEventData eventData) => hovered = true;
+        public void OnPointerExit(PointerEventData eventData) => hovered = false;
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            // Own the press as well as the click; the native Day button is our parent.
+            if (eventData.button == PointerEventData.InputButton.Left) hovered = true;
+        }
+        private void OnDisable() => hovered = false;
+
+        private bool CanOpen()
+        {
+            if (!UIManager.Instance || !UIManager.Instance.IsWorldInteractable() ||
+                !OverlayManager.Instance || OverlayManager.Instance.IsOpen()) return false;
+            var button = transform.parent.GetComponent<Button>();
+            return !button || button.IsInteractable();
         }
     }
 }

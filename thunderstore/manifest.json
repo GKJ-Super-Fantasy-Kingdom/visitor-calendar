@@ -1,6 +1,6 @@
 {
   "name": "VisitorCalendar",
-  "version_number": "0.1.3",
+  "version_number": "0.1.4",
   "website_url": "https://github.com/GKJ-Super-Fantasy-Kingdom/visitor-calendar",
   "description": "See who is expected to visit, review past visits and claims, and track upcoming contract deadlines and caravan orders.",
   "dependencies": [

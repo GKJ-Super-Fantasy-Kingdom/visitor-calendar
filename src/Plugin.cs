@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace VisitorCalendar
 {
-    [BepInPlugin(Id, "Visitor Calendar", "0.1.3")]
+    [BepInPlugin(Id, "Visitor Calendar", "0.1.4")]
     [BepInDependency(Visitors.Weekly, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(Visitors.Daily, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(Visitors.Charters, BepInDependency.DependencyFlags.SoftDependency)]

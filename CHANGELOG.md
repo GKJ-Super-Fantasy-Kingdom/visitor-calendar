@@ -1,3 +1,9 @@
+# 0.1.4
+
+- Give appointment dates and detail buttons a stepped white edge on hover or focus. Returning from an appointment restores focus to its date.
+- Make visitor portraits, delivery markers and status labels easier to scan. Show paging hints for the current input device when its actions are bound.
+- Refresh the Calendar badge, package icon and screenshots. Verified in Human and Undead kingdoms on Super Fantasy Kingdom 0.8.070.
+
 # 0.1.3
 
 Clarify the mod’s description and compatibility for players.
